@@ -88,10 +88,6 @@
         args-number (count vec-args)
         user-name (if (<= 1 args-number) (get vec-args 0))
         access-token (if (<= 2 args-number) (get vec-args 1))]
-    (println "args: " vec-args)
-    (println "args-number: " args-number)
-    (println "user-name: " user-name)
-    (println "access-token: " access-token)
     (if (= 1 args-number) (if (= "help" (get vec-args 0)) (do
         (println "")
         (println "Usage:")
