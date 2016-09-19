@@ -27,8 +27,6 @@
             nil))
     (is (=  (:host (pattern-info "host(http://dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
             nil))
-    (is (=  (:host (pattern-info "host(); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
-            nil))
     (is (=  (:host (pattern-info "path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
             nil))
   )
@@ -81,5 +79,40 @@
     (is (= nil (recognize 
                   (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
                   "dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")))
+  )
+  (testing "URL-MATCH. Good uri."
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host(); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:offset "1"] [:type "users"] [:paragraph "paragraph=3"]] inner-result)))
+
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(list=?type); fragment(?paragraph)") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:type "users"] [:paragraph "paragraph=3"]] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com); path(?user/status/?id); fragment(?paragraph)") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:paragraph "paragraph=3"]] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"]] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host(dribbble.com);") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [] inner-result)))
+    (let [inner-result (recognize 
+                          (pattern-info "host();") 
+                          "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")]
+      (is (= [] inner-result)))
   )
 )
