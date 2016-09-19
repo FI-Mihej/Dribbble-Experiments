@@ -68,14 +68,33 @@
 ; "dribbble.com"
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
+;
+; ""
+; from
+; "host(); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
+;
+; nil
+; from
+; "path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn host-name [pattern]
-  (re-find (re-matcher (re-pattern (str "(?<=host\\()[" uri-allowed-chars "]+(?=\\))")) pattern)))
+  (let [inner-empty-host? (some? (re-find #"host\(\)" pattern))]
+    (if inner-empty-host? 
+        ""
+        (re-find (re-matcher (re-pattern (str "(?<=host\\()[" uri-allowed-chars "]+(?=\\))")) pattern)))))
 
 ; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
 ; from
 ; "dribbble.com"
+;
+; #"^(http|https)://[\w\-\~\%\.]+($|\/$|\/.+|\#$|\#.+)"
+; from
+; ""
 (defn host-pattern [host-name]
-  (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+|\\#$|\\#.+)")))
+  (if (some? host-name) 
+      (if (> (count host-name) 0) 
+          (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+|\\#$|\\#.+)"))
+          (re-pattern (str "^(http|https)://[" uri-allowed-chars "]+($|\\/$|\\/.+|\\#$|\\#.+)")))
+      ))
 
 ; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
 ; from
@@ -132,26 +151,31 @@
 ; from
 ; "dribbble.com"
 ;
-; #"(?<=^(?:http|https)://[\w\-\~\%\.]\/)[\w\-\~\%\.\/]+(?=\?)"
+; #"(?<=^(?:http|https)://[\w\-\~\%\.]+\/)[\w\-\~\%\.\/]+(?=\?)"
 ; from
 ; "dribbble.com"
 (defn path-pattern [host-name]
   (if (some? host-name) 
-      (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" uri-allowed-chars "\\/]+(?=\\?)"))
-      (re-pattern (str "(?<=^(?:http|https)://[" uri-allowed-chars "]\\/)[" uri-allowed-chars "\\/]+(?=\\?)"))
-      ))
+      (if (> (count host-name) 0)
+          (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" uri-allowed-chars "\\/]+(?=\\?)")))))
 
-; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
+(defonce path-prefix-pattern #"^(?:http|https)://[\w\-\~\%\.]+(?=.+)")
+
+(defonce path-postfix-pattern (re-pattern (str "(?<=\\/)[" uri-allowed-chars "\\/]+(?=\\?)")))
+
+; {:host-was-defined true, :path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path-info [pattern]
   (let [inner-path (path pattern)
-        inner-host-name (host-name pattern)]
+        inner-host-name (host-name pattern)
+        inner-host-name-defined? (if (some? inner-host-name) (if (> (count inner-host-name) 0) true false))
+        inner-path-pattern (if (some? inner-path) (path-pattern inner-host-name))
+        inner-path-prefix-pattern ()]
     (if (some? inner-path) {
-      :path-pattern (path-pattern inner-host-name)
+      :host-was-defined inner-host-name-defined?
+      :path-pattern inner-path-pattern
       :path-pieces (path-param-info inner-path)})))
-
-; (defn check-passive-path-piece [passive-path-piece-template name-to-check])
 
 ; "shots/1905065-Travel-Icons-pack"
 ; from
@@ -160,30 +184,44 @@
 (defn get-path-with-info [uri pattern]
   (re-find (re-matcher pattern uri)))
 
+; "shots/1905065-Travel-Icons-pack"
+; from
+; "https://dribbble.com/shots/1905065-Travel-Icons-pack?list=users&offset=1"
+; #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)"
+(defn get-path-with-info-for-undefined-host [uri]
+  (let [inner-host-part (re-find (re-matcher path-prefix-pattern uri))
+        inner-host-part-size (count inner-host-part)
+        inner-post-host-part (subs uri inner-host-part-size)]
+    (re-find (re-matcher path-postfix-pattern inner-post-host-part))))
+
 ; [[:user "some-username"] [:id "1905065-Travel-Icons-pack"]]
 ; from
 ; "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1"
-; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
+; {:host-was-defined true, :path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 (defn generate-path-answer [uri inner-path-info]
   (let [can-be? (some? inner-path-info)
-        inner-relative-part (if can-be? (get-path-with-info uri (:path-pattern inner-path-info)))
+        path-pattern-good (if can-be? (some? (:host-was-defined inner-path-info)))
+        path-pattern-defined (if path-pattern-good (:host-was-defined inner-path-info))
+        inner-relative-part (if path-pattern-good (if path-pattern-defined 
+                                                      (get-path-with-info uri (:path-pattern inner-path-info))
+                                                      (get-path-with-info-for-undefined-host uri)))
         inner-path-pieces (if (some? inner-relative-part) (path-to-pieces inner-relative-part))
         inner-pieces-info (if can-be? (:path-pieces inner-path-info))
         inner-is-enough-pieces? (if can-be? (>= (count inner-path-pieces) (count inner-pieces-info)) false)
         inner-is-good-to-go? (and can-be? inner-is-enough-pieces?)]
-    (if inner-is-good-to-go?
-      (remove nil? (vec (map #((fn [path-pieces piece-info] 
-          (if (some? (get piece-info 1)) 
-            [
-              (get piece-info 1) 
-              (get path-pieces (get piece-info 0))
-            ]
-            (if (not (= (get piece-info 2) (get path-pieces (get piece-info 0))))
-              [nil nil])
-          )
-        ) inner-path-pieces %) inner-pieces-info)))
-      [nil]
-      )))
+    (if can-be? 
+      (if inner-is-enough-pieces?
+        (remove nil? (vec (map #((fn [path-pieces piece-info] 
+            (if (some? (get piece-info 1)) 
+              [
+                (get piece-info 1) 
+                (get path-pieces (get piece-info 0))
+              ]
+              (if (not (= (get piece-info 2) (get path-pieces (get piece-info 0))))
+                [nil nil])
+            )
+          ) inner-path-pieces %) inner-pieces-info)))
+        [nil]))))
 
 ; ==============================================================================
 ; === QUERYPARAMS ==============================================================
