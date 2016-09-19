@@ -185,7 +185,8 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn queryparams [pattern]
-  (vec (re-seq (re-pattern (str "(?<=queryparam\\()[" uri-allowed-chars "\\?\\=\\/]+(?=\\))")) pattern)))
+  (let [inner-result (re-seq (re-pattern (str "(?<=queryparam\\()[" uri-allowed-chars "\\?\\=\\/]+(?=\\))")) pattern)]
+    (if (some? inner-result) (vec inner-result))))
 
 ; "list"
 ; from
@@ -197,20 +198,25 @@
 ; from
 ; "list"
 (defn query-param-pattern [q-param-name]
-  (re-pattern (str "(?<=[\\?\\&]" q-param-name "\\=)[\\w\\-\\%]+(?=[$\\&\\#])")))
+  (if (some? q-param-name) (re-pattern (str "(?<=[\\?\\&]" q-param-name "\\=)[\\w\\-\\%]+(?=[$\\&\\#])"))))
 
 ; [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]
 ; from
 ; "list=?type"
 (defn query-param-info [pattern]
-  [(param-to-keyword pattern) (query-param-pattern (query-param-name pattern))])
+  (let [inner-keyword (param-to-keyword pattern)
+        inner-query-param-pattern (query-param-pattern (query-param-name pattern))
+        inner-good-to-go? (and (some? inner-keyword) (some? inner-query-param-pattern))]
+    (if inner-good-to-go? [inner-keyword inner-query-param-pattern])))
 
 ; [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]]
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn query-info [pattern]
-  (let [inner-queryparams (queryparams pattern)]
-    (if (some? inner-queryparams) (vec (map query-param-info inner-queryparams)))))
+  (let [inner-queryparams (queryparams pattern)
+        inner-result (if (some? inner-queryparams) (remove nil? (vec (map query-param-info inner-queryparams))))]
+    (if (some? inner-result)
+        (if (> (count inner-result) 0) inner-result))))
 
 ; "users"
 ; from
@@ -244,8 +250,10 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
 (defn fragment-info [pattern]
-  (let [inner-fragment (fragment pattern)]
-    (if (some? inner-fragment) [(param-to-keyword inner-fragment) (fragment-pattern)])))
+  (let [inner-fragment (fragment pattern)
+        inner-keyword (if (some? inner-fragment) (param-to-keyword inner-fragment))
+        inner-good-to-go? (and (some? inner-fragment) (some? inner-keyword))]
+    (if inner-good-to-go? [inner-keyword (fragment-pattern)])))
 
 ; "some-my/fragment"
 ; from
