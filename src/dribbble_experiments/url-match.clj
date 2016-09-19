@@ -37,6 +37,9 @@
 ; ==============================================================================
 ; === GENERIC ==================================================================
 
+(defn uri-allowed-chars []
+  "\\w\\-\\~\\%\\.")
+
 ; :type
 ; from
 ; "list=?type"
@@ -45,7 +48,7 @@
 ; from
 ; "?user"
 (defn param-to-keyword [pattern]
-  (keyword (re-find (re-matcher #"(?<=\?)[\w\-]+(?=$)" pattern))))
+  (keyword (re-find (re-matcher (re-pattern (str "(?<=\\?)[" (uri-allowed-chars) "]+(?=$)")) pattern))))
 
 ; "https\\:\\/\\/dribbble\\.com\\/shots\\/1905065\\-Travel\\-Icons\\-pack\\?list\\=users"
 ; from
@@ -64,15 +67,15 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn host-name [pattern]
-  (re-find (re-matcher #"(?<=host\()[\w\.\-]+(?=\))" pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=host\\()[" (uri-allowed-chars) "]+(?=\\))")) pattern)))
 
-; #"(?<=^(http|https)://)dribbble\.com[$|\/.+|]"
+; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
 ; from
 ; "dribbble.com"
 (defn host-pattern [host-name]
-  (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+)")))
+  (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+|\\#$|\\#.+)")))
 
-; #"^(http|https)://dribbble\.com($|\/$|\/.+)"
+; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn host-info [pattern]
@@ -97,7 +100,7 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path [pattern]
-  (re-find (re-matcher #"(?<=path\()[\w\.\-\?\/]+(?=\))" pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=path\\()[" (uri-allowed-chars) "\\?\\/]+(?=\\))")) pattern)))
 
 ; ["?user" "status" "?id"]
 ; from
@@ -105,14 +108,24 @@
 (defn path-to-pieces [path-pattern]
   (st/split path-pattern #"/"))
 
-; [[0 :user] [1 nil] [2 :id]]
+; "status"
+; from
+; "status"
+;
+; nil
+; from
+; "?status"
+(defn path-piece-name [path-piece]
+  (re-matches (re-pattern (str "[" (uri-allowed-chars) "]+")) path-piece))
+
+; [[0 :user nil] [1 nil "status"] [2 :id nil]]
 ; from
 ; "?user/status/?id"
 (defn path-param-info [path-pattern]
   (let [path-pieces (path-to-pieces path-pattern)]
-    (vec (map-indexed (fn [num item] [num (param-to-keyword item)]) path-pieces))))
+    (vec (map-indexed (fn [num item] [num (param-to-keyword item) (path-piece-name item)]) path-pieces))))
 
-; [[0 :user] [1 nil] [2 :id]]
+; [[0 :user nil] [1 nil "status"] [2 :id nil]]
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path-info [pattern]
@@ -125,27 +138,27 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn queryparams [pattern]
-  (vec (re-seq #"(?<=queryparam\()[\w\.\-\?\=]+(?=\))" pattern)))
+  (vec (re-seq (re-pattern (str "(?<=queryparam\\()[" (uri-allowed-chars) "\\?\\=\\/]+(?=\\))")) pattern)))
 
 ; "list"
 ; from
 ; "list=?type"
 (defn query-param-name [pattern]
-  (re-find (re-matcher #"(?<=^)[\w\-\%]+(?=\=\?)" pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=^)[" (uri-allowed-chars) "]+(?=\\=\\?)")) pattern)))
 
-; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&])"
+; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
 ; from
 ; "list"
 (defn query-param-pattern [q-param-name]
-  (re-pattern (str "(?<=[\\?\\&]" q-param-name "\\=)[\\w\\-\\%]+(?=[$\\&])")))
+  (re-pattern (str "(?<=[\\?\\&]" q-param-name "\\=)[\\w\\-\\%]+(?=[$\\&\\#])")))
 
-; [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&])"]
+; [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]
 ; from
 ; "list=?type"
 (defn query-param-info [pattern]
   [(param-to-keyword pattern) (query-param-pattern (query-param-name pattern))])
 
-; [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&])"]]
+; [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]]
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn query-info [pattern]
@@ -154,18 +167,46 @@
 ; "users"
 ; from
 ; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1"
-; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&])"
+; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
 (defn get-query-param-with-info [uri pattern]
+  (re-find (re-matcher pattern uri)))
+
+; ==============================================================================
+; === FRAGMENT ==============================================================
+
+; "?paragraph"
+; from
+; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
+(defn fragment [pattern]
+  (re-find (re-matcher (re-pattern (str "(?<=fragment\\()[" (uri-allowed-chars) "\\?]+(?=\\))")) pattern)))
+
+; #"(?<=\#).+(?=$)"
+(defn fragment-pattern []
+  #"(?<=\#).+(?=$)")
+
+; [:paragraph #"(?<=\#).+(?=$)"]
+; from
+; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
+(defn fragment-info [pattern]
+  (let [fragment-data (fragment pattern)]
+    [(param-to-keyword fragment-data) (fragment-pattern)]))
+
+; "some-my/fragment"
+; from
+; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1#some-my/fragment"
+; #"(?<=\#).+(?=$)"
+(defn get-fragment-with-info [uri pattern]
   (re-find (re-matcher pattern uri)))
 
 ; ==============================================================================
 ; === PATTERN INFO =============================================================
 
-; {:host #"^(http|https)://dribbble\.com($|\/$|\/.+)", :path [[0 :user] [1 nil] [2 :id]], :query [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&])"]]} 
+; {:host #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)", :path [[0 :user nil] [1 nil "status"] [2 :id nil]], :query [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]], :fragment [:paragraph #"(?<=\#).+(?=$)"]} 
 ; from
-; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
+; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
 (defn pattern-info [pattern]
   { :host (host-info pattern)
     :path (path-info pattern)
-    :query (query-info pattern)})
+    :query (query-info pattern)
+    :fragment (fragment-info pattern)})
 
