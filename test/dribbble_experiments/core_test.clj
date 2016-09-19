@@ -4,6 +4,34 @@
             [dribbble-experiments.url_match :refer :all]))
 
 (deftest url-match-tests
+  (testing "URL-MATCH. Pattern Info."
+    (is (=  (:fragment (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragmmmment(?paragraph)"))
+            nil))
+    (is (=  (:fragment (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(paragraph)"))
+            nil))
+    (is (=  (:fragment (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type)"))
+            nil))
+    (is (=  (:query (pattern-info "host(dribbble.com); path(?user/status/?id); querrrryparam(list=?type); fragment(?paragraph)"))
+            nil))
+    (is (=  (:query (pattern-info "host(dribbble.com); path(?user/status/?id); fragment(?paragraph)"))
+            nil))
+    (is (=  (:query (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(list=type); fragment(?paragraph)"))
+            nil))
+    (is (=  (:query (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(=?type); fragment(?paragraph)"))
+            nil))
+    (is (=  (:query (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(list=?); fragment(?paragraph)"))
+            nil))
+    (is (=  (:path (pattern-info "host(dribbble.com); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
+            nil))
+    (is (=  (:path (pattern-info "host(dribbble.com); path(); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
+            nil))
+    (is (not=  (:host (pattern-info "host(http://dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
+            nil))
+    (is (not=  (:host (pattern-info "host(); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
+            nil))
+    (is (not=  (:host (pattern-info "path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
+            nil))
+  )
   (testing "URL-MATCH. Bad uri."
     (is (= nil (recognize 
                   (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
@@ -53,4 +81,5 @@
     (is (= nil (recognize 
                   (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)") 
                   "dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")))
-                  ))
+  )
+)
