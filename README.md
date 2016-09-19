@@ -1,36 +1,46 @@
 # dribbble-experiments
 
-FIXME: description
+1) Experiments with Dribbble API
+2) URI parsing and match library
 
-## Installation
+## Build
 
-Download from http://example.com/FIXME.
+    $ lein uberjar
 
-## Usage
+## Run
 
-FIXME: explanation
+Usage:
+    lein run <Username> <AccessToken>
+Example:
+    $ lein run "louiethelowe" "960d368303253732c7d0d6e2081c5ab8efe1e79349a223ce4d8458be4e49948c"
 
-    $ java -jar dribbble-experiments-0.1.0-standalone.jar [args]
+Help:
+    $ lein run help
 
-## Options
+## Jar Usage
+Args are the same as in "Run" part
 
-FIXME: listing of options this app accepts.
+    $ java -jar dribbble-experiments-0.1.0-SNAPSHOT.jar [args]
+
+## Run Tests for URI parsing and match library
+
+    $ lein test
+
+# URI parsing and match library
 
 ## Examples
 
-...
+    user=>(def pattern (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
 
-### Bugs
+    user=>(recognize pattern "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")
+    [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]]
 
-...
+    user=>(recognize pattern "https://twitter.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")
+    nil
 
-### Any Other Sections
-### That You Think
-### Might be Useful
+    user=>(def pattern-any-host (pattern-info "host(); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"))
 
-## License
+    user=>(recognize pattern-any-host "https://twitter.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3")
+    [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]]
 
-Copyright © 2016 FIXME
-
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+    
