@@ -37,8 +37,10 @@
 ; ==============================================================================
 ; === GENERIC ==================================================================
 
-(defn uri-allowed-chars []
-  "\\w\\-\\~\\%\\.")
+; (defn uri-allowed-chars []
+;   "\\w\\-\\~\\%\\.")
+
+(defonce uri-allowed-chars "\\w\\-\\~\\%\\.")
 
 ; :type
 ; from
@@ -126,13 +128,13 @@
   (let [path-pieces (path-to-pieces path-pattern)]
     (vec (map-indexed (fn [num item] [num (param-to-keyword item) (path-piece-name item)]) path-pieces))))
 
-; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
+; #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)"
 ; from
 ; "dribbble.com"
 (defn path-pattern [host-name]
-  (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+|\\#$|\\#.+)")))
+  (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" (uri-allowed-chars) "\\/]+(?=\\?)")))
 
-; [[0 :user nil] [1 nil "status"] [2 :id nil]]
+; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path-info [pattern]
@@ -142,23 +144,38 @@
       :path-pattern (path-pattern inner-host-name)
       :path-pieces (path-param-info inner-path)})))
 
-(defn check-passive-path-piece [passive-path-piece-template name-to-check])
+; (defn check-passive-path-piece [passive-path-piece-template name-to-check])
 
-; "users"
+; "shots/1905065-Travel-Icons-pack"
 ; from
-; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1"
-; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
+; "https://dribbble.com/shots/1905065-Travel-Icons-pack?list=users&offset=1"
+; #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)"
 (defn get-path-with-info [uri pattern]
   (re-find (re-matcher pattern uri)))
 
-; [[:list "users"] [:offset "1"]]
+; [[:user "some-username"] [:id "1905065-Travel-Icons-pack"]]
 ; from
-; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1#some-my/fragment"
-; [[0 nil "shots"] [1 :id nil]]
+; "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1"
+; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 (defn generate-path-answer [uri inner-path-info]
-  (let [inner-path-pieces ]
-    (if (some? inner-path-info)
-      (vec (map #((fn [uri param-info] [(get param-info 0) (get-path-param-with-info uri (get param-info 1))]) uri %) inner-path-info)))))
+  (let [can-be? (some? inner-path-info)
+        inner-relative-part (if can-be? (get-path-with-info uri (:path-pattern inner-path-info)))
+        inner-path-pieces (if (some? inner-relative-part) (path-to-pieces inner-relative-part))
+        inner-pieces-info (if can-be? (:path-pieces inner-path-info))
+        inner-is-enough-pieces? (if can-be? (>= (count inner-path-pieces) (count inner-pieces-info)) false)
+        inner-is-good-to-go? (and can-be? inner-is-enough-pieces?)]
+    (if inner-is-good-to-go?
+      (remove nil? (vec (map #((fn [path-pieces piece-info] 
+          (if (some? (get piece-info 1)) 
+            [
+              (get piece-info 1) 
+              (get path-pieces (get piece-info 0))
+            ]
+            (if (not (= (get piece-info 2) (get path-pieces (get piece-info 0))))
+              [nil nil])
+          )
+        ) inner-path-pieces %) inner-pieces-info)))
+      )))
 
 ; ==============================================================================
 ; === QUERYPARAMS ==============================================================
@@ -247,7 +264,7 @@
 ; ==============================================================================
 ; === API ======================================================================
 
-; {:host #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)", :path [[0 :user nil] [1 nil "status"] [2 :id nil]], :query [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]], :fragment [:paragraph #"(?<=\#).+(?=$)"]} 
+; {:host #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)", :path {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}, :query [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]], :fragment [:paragraph #"(?<=\#).+(?=$)"]}
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
 (defn pattern-info [pattern]
@@ -256,6 +273,20 @@
     :query (query-info pattern)
     :fragment (fragment-info pattern)})
 
+; [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]]
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3"
+;
+; nil
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://twitter.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3"
+;
+; [[:user "some-username"] [nil nil] [:id "weight"] [:offset "1"] [:type nil] [:paragraph nil]]
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://dribbble.com/some-username/height/weight/1905065-Travel-Icons-pack?listing=users&offset=1&page=34"
 (defn recognize-detailed [pattern uri]
   (let [inner-host-info (:host pattern)
         is-host-ok? (if (some? inner-host-info)
@@ -270,6 +301,20 @@
         (generate-query-answer uri inner-query-info)
         (generate-fragment-answer uri inner-fragment-info))))))
 
+; [[:user "some-username"] [:id "1905065-Travel-Icons-pack"] [:offset "1"] [:type "users"] [:paragraph "paragraph=3"]]
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://dribbble.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3"
+;
+; nil
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://twitter.com/some-username/status/1905065-Travel-Icons-pack?list=users&offset=1&page=34#paragraph=3"
+;
+; nil
+; from
+; (pattern-info "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)")
+; "https://dribbble.com/some-username/height/weight/1905065-Travel-Icons-pack?listing=users&offset=1&page=34"
 (defn recognize [pattern uri]
   (let [detailed-result (recognize-detailed pattern uri)]
     (if (some? detailed-result)
