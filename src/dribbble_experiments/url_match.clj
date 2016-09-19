@@ -108,8 +108,8 @@
 ; ["?user" "status" "?id"]
 ; from
 ; "?user/status/?id"
-(defn path-to-pieces [path-pattern]
-  (st/split path-pattern #"/"))
+(defn path-to-pieces [inner-path-pattern]
+  (st/split inner-path-pattern #"/"))
 
 ; "status"
 ; from
@@ -124,15 +124,22 @@
 ; [[0 :user nil] [1 nil "status"] [2 :id nil]]
 ; from
 ; "?user/status/?id"
-(defn path-param-info [path-pattern]
-  (let [path-pieces (path-to-pieces path-pattern)]
+(defn path-param-info [inner-path-pattern]
+  (let [path-pieces (path-to-pieces inner-path-pattern)]
     (vec (map-indexed (fn [num item] [num (param-to-keyword item) (path-piece-name item)]) path-pieces))))
 
 ; #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)"
 ; from
 ; "dribbble.com"
+;
+; #"(?<=^(?:http|https)://[\w\-\~\%\.]\/)[\w\-\~\%\.\/]+(?=\?)"
+; from
+; "dribbble.com"
 (defn path-pattern [host-name]
-  (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" uri-allowed-chars "\\/]+(?=\\?)")))
+  (if (some? host-name) 
+      (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" uri-allowed-chars "\\/]+(?=\\?)"))
+      (re-pattern (str "(?<=^(?:http|https)://[" uri-allowed-chars "]\\/)[" uri-allowed-chars "\\/]+(?=\\?)"))
+      ))
 
 ; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 ; from
