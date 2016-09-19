@@ -79,7 +79,8 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn host-info [pattern]
-  (host-pattern (host-name pattern)))
+  (let [inner-host-name (host-name pattern)]
+    (if (some? inner-host-name) (host-pattern inner-host-name))))
 
 ; true
 ; from
@@ -125,11 +126,39 @@
   (let [path-pieces (path-to-pieces path-pattern)]
     (vec (map-indexed (fn [num item] [num (param-to-keyword item) (path-piece-name item)]) path-pieces))))
 
+; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
+; from
+; "dribbble.com"
+(defn path-pattern [host-name]
+  (re-pattern (str "^(http|https)://" (prepare-string-to-re-pattern host-name) "($|\\/$|\\/.+|\\#$|\\#.+)")))
+
 ; [[0 :user nil] [1 nil "status"] [2 :id nil]]
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path-info [pattern]
-  (path-param-info (path pattern)))
+  (let [inner-path (path pattern)
+        inner-host-name (host-name pattern)]
+    (if (some? inner-path) {
+      :path-pattern (path-pattern inner-host-name)
+      :path-pieces (path-param-info inner-path)})))
+
+(defn check-passive-path-piece [passive-path-piece-template name-to-check])
+
+; "users"
+; from
+; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1"
+; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
+(defn get-path-with-info [uri pattern]
+  (re-find (re-matcher pattern uri)))
+
+; [[:list "users"] [:offset "1"]]
+; from
+; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1#some-my/fragment"
+; [[0 nil "shots"] [1 :id nil]]
+(defn generate-path-answer [uri inner-path-info]
+  (let [inner-path-pieces ]
+    (if (some? inner-path-info)
+      (vec (map #((fn [uri param-info] [(get param-info 0) (get-path-param-with-info uri (get param-info 1))]) uri %) inner-path-info)))))
 
 ; ==============================================================================
 ; === QUERYPARAMS ==============================================================
@@ -162,7 +191,8 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn query-info [pattern]
-  (vec (map query-param-info (queryparams pattern))))
+  (let [inner-queryparams (queryparams pattern)]
+    (if (some? inner-queryparams) (vec (map query-param-info inner-queryparams)))))
 
 ; "users"
 ; from
@@ -170,6 +200,14 @@
 ; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
 (defn get-query-param-with-info [uri pattern]
   (re-find (re-matcher pattern uri)))
+
+; [[:list "users"] [:offset "1"]]
+; from
+; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1#some-my/fragment"
+; [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]]
+(defn generate-query-answer [uri inner-query-info]
+  (if (some? inner-query-info)
+    (vec (map #((fn [uri param-info] [(get param-info 0) (get-query-param-with-info uri (get param-info 1))]) uri %) inner-query-info))))
 
 ; ==============================================================================
 ; === FRAGMENT ==============================================================
@@ -188,8 +226,8 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
 (defn fragment-info [pattern]
-  (let [fragment-data (fragment pattern)]
-    [(param-to-keyword fragment-data) (fragment-pattern)]))
+  (let [inner-fragment (fragment pattern)]
+    (if (some? inner-fragment) [(param-to-keyword inner-fragment) (fragment-pattern)])))
 
 ; "some-my/fragment"
 ; from
@@ -198,8 +236,16 @@
 (defn get-fragment-with-info [uri pattern]
   (re-find (re-matcher pattern uri)))
 
+; [[:paragraph "some-my/fragment"]]
+; from
+; "https://twitter.com/shots/1905065-Travel-Icons-pack?list=users&offset=1#some-my/fragment"
+; [:paragraph #"(?<=\#).+(?=$)"]
+(defn generate-fragment-answer [uri inner-fragment-info]
+  (if (some? inner-fragment-info)
+    [[(get inner-fragment-info 0) (get-fragment-with-info uri (get inner-fragment-info 1))]]))
+
 ; ==============================================================================
-; === PATTERN INFO =============================================================
+; === API ======================================================================
 
 ; {:host #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)", :path [[0 :user nil] [1 nil "status"] [2 :id nil]], :query [[:offset #"(?<=[\?\&]offset\=)[\w\-\%]+(?=[$\&\#])"] [:type #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"]], :fragment [:paragraph #"(?<=\#).+(?=$)"]} 
 ; from
@@ -210,3 +256,22 @@
     :query (query-info pattern)
     :fragment (fragment-info pattern)})
 
+(defn recognize-detailed [pattern uri]
+  (let [inner-host-info (:host pattern)
+        is-host-ok? (if (some? inner-host-info)
+                        (check-host-by-info inner-host-info uri)
+                        true)
+        inner-path-info (:path pattern)
+        inner-query-info (:query pattern)
+        inner-fragment-info (:fragment pattern)]
+    (if is-host-ok?
+      (vec (concat
+        (generate-path-answer uri inner-path-info)
+        (generate-query-answer uri inner-query-info)
+        (generate-fragment-answer uri inner-fragment-info))))))
+
+(defn recognize [pattern uri]
+  (let [detailed-result (recognize-detailed pattern uri)]
+    (if (some? detailed-result)
+        (if (not (contains? (set (flatten detailed-result)) nil))
+            detailed-result))))
