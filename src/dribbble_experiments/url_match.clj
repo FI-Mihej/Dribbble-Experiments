@@ -1,4 +1,4 @@
-(ns dribbble-experiments.url-match
+(ns dribbble-experiments.url_match
   (:gen-class)
   (:require [clojure.string :as st]
             [clojure.data.json :as json]))
@@ -50,7 +50,7 @@
 ; from
 ; "?user"
 (defn param-to-keyword [pattern]
-  (keyword (re-find (re-matcher (re-pattern (str "(?<=\\?)[" (uri-allowed-chars) "]+(?=$)")) pattern))))
+  (keyword (re-find (re-matcher (re-pattern (str "(?<=\\?)[" uri-allowed-chars "]+(?=$)")) pattern))))
 
 ; "https\\:\\/\\/dribbble\\.com\\/shots\\/1905065\\-Travel\\-Icons\\-pack\\?list\\=users"
 ; from
@@ -69,7 +69,7 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn host-name [pattern]
-  (re-find (re-matcher (re-pattern (str "(?<=host\\()[" (uri-allowed-chars) "]+(?=\\))")) pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=host\\()[" uri-allowed-chars "]+(?=\\))")) pattern)))
 
 ; #"^(http|https)://dribbble\.com($|\/$|\/.+|\#$|\#.+)"
 ; from
@@ -103,7 +103,7 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn path [pattern]
-  (re-find (re-matcher (re-pattern (str "(?<=path\\()[" (uri-allowed-chars) "\\?\\/]+(?=\\))")) pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=path\\()[" uri-allowed-chars "\\?\\/]+(?=\\))")) pattern)))
 
 ; ["?user" "status" "?id"]
 ; from
@@ -119,7 +119,7 @@
 ; from
 ; "?status"
 (defn path-piece-name [path-piece]
-  (re-matches (re-pattern (str "[" (uri-allowed-chars) "]+")) path-piece))
+  (re-matches (re-pattern (str "[" uri-allowed-chars "]+")) path-piece))
 
 ; [[0 :user nil] [1 nil "status"] [2 :id nil]]
 ; from
@@ -132,7 +132,7 @@
 ; from
 ; "dribbble.com"
 (defn path-pattern [host-name]
-  (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" (uri-allowed-chars) "\\/]+(?=\\?)")))
+  (re-pattern (str "(?<=^(?:http|https)://" (prepare-string-to-re-pattern host-name) "\\/)[" uri-allowed-chars "\\/]+(?=\\?)")))
 
 ; {:path-pattern #"(?<=^(?:http|https)://dribbble\.com\/)[\w\-\~\%\.\/]+(?=\?)", :path-pieces [[0 :user nil] [1 nil "status"] [2 :id nil]]}
 ; from
@@ -184,13 +184,13 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type);"
 (defn queryparams [pattern]
-  (vec (re-seq (re-pattern (str "(?<=queryparam\\()[" (uri-allowed-chars) "\\?\\=\\/]+(?=\\))")) pattern)))
+  (vec (re-seq (re-pattern (str "(?<=queryparam\\()[" uri-allowed-chars "\\?\\=\\/]+(?=\\))")) pattern)))
 
 ; "list"
 ; from
 ; "list=?type"
 (defn query-param-name [pattern]
-  (re-find (re-matcher (re-pattern (str "(?<=^)[" (uri-allowed-chars) "]+(?=\\=\\?)")) pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=^)[" uri-allowed-chars "]+(?=\\=\\?)")) pattern)))
 
 ; #"(?<=[\?\&]list\=)[\w\-\%]+(?=[$\&\#])"
 ; from
@@ -233,7 +233,7 @@
 ; from
 ; "host(dribbble.com); path(?user/status/?id); queryparam(offset=?offset); queryparam(list=?type); fragment(?paragraph)"
 (defn fragment [pattern]
-  (re-find (re-matcher (re-pattern (str "(?<=fragment\\()[" (uri-allowed-chars) "\\?]+(?=\\))")) pattern)))
+  (re-find (re-matcher (re-pattern (str "(?<=fragment\\()[" uri-allowed-chars "\\?]+(?=\\))")) pattern)))
 
 ; #"(?<=\#).+(?=$)"
 (defn fragment-pattern []
