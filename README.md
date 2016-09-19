@@ -65,4 +65,5 @@ user=>(recognize
     [:type "users"] 
     [:paragraph "paragraph=3"]]
 ```
-    
+
+More examples can be seen in "test/drebble_experiments/core_rest.clj"
